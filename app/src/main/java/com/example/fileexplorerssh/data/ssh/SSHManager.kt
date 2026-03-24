@@ -4,94 +4,97 @@ import android.util.Log
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.util.Properties
 
 class SSHManager {
-
     private var session: Session? = null
+    private val tag = "SSH_DEBUG"
 
-    // ---------------- CONNECT ----------------
-    fun connect(
-        host: String,
-        username: String,
-        password: String,
-        port: Int = 22
-    ): Boolean {
-
+    fun connect(host: String, user: String, pass: String, port: Int): Boolean {
+        Log.d(tag, "Attempting connection to $host:$port as $user")
         return try {
-            Log.d("SSH_TEST", "Starting connection...")
-
             val jsch = JSch()
-            session = jsch.getSession(username, host, port)
-            session?.setPassword(password)
-
-            val config = Properties()
-            config["StrictHostKeyChecking"] = "no"
+            session = jsch.getSession(user, host, port)
+            session?.setPassword(pass)
+            val config = Properties().apply { put("StrictHostKeyChecking", "no") }
             session?.setConfig(config)
-
             session?.connect(10000)
 
             val connected = session?.isConnected == true
-
+            Log.d(tag, "Connection result: $connected")
             connected
-
         } catch (e: Exception) {
-            Log.e("SSH_TEST", "Connection error: ${e.message}")
+            Log.e(tag, "Connect Error: ${e.message}")
             false
         }
     }
 
-    // ---------------- EXECUTE COMMAND ----------------
     fun executeCommand(command: String): String {
-
-        if (session == null || session?.isConnected != true) {
-            Log.e("SSH_CMD", "Session not connected")
-            return "Not connected"
+        Log.d(tag, "Executing command: $command")
+        val currentSession = session ?: return "Error: No Session".also {
+            Log.e(tag, "Command failed: No active session")
         }
 
         return try {
-
-            Log.d("SSH_CMD", "Opening channel")
-
-            val channel =
-                session!!.openChannel("exec") as ChannelExec
-
+            val channel = currentSession.openChannel("exec") as ChannelExec
             channel.setCommand(command)
-            channel.inputStream = null
-            channel.setErrStream(System.err)
-
             val inputStream = channel.inputStream
-
             channel.connect()
 
-            Log.d("SSH_CMD", "Command executing...")
-
-            val reader = BufferedReader(InputStreamReader(inputStream))
             val output = StringBuilder()
+            val reader = inputStream.bufferedReader()
+            val buffer = CharArray(1024)
+            var bytesRead: Int
 
-            var line: String?
-
-            while (reader.readLine().also { line = it } != null) {
-                output.append(line).append("\n")
+            while (true) {
+                while (reader.ready()) {
+                    bytesRead = reader.read(buffer)
+                    if (bytesRead <= 0) break
+                    output.append(buffer, 0, bytesRead)
+                }
+                if (channel.isClosed) {
+                    if (!reader.ready()) break
+                }
+                Thread.sleep(50)
             }
-
             channel.disconnect()
-
-            Log.d("SSH_CMD", "Command finished")
-
-            output.toString()
-
+            val result = output.toString().trim()
+            Log.d(tag, "Command result size: ${result.length} characters")
+            result
         } catch (e: Exception) {
-            Log.e("SSH_CMD", "Execution error: ${e.message}")
-            "ERROR: ${e.message}"
+            Log.e(tag, "Execution Error: ${e.message}")
+            "Error: ${e.message}"
         }
     }
 
-    // ---------------- DISCONNECT ----------------
+    fun resolvePath(basePath: String, target: String): String {
+        // Try to enter the target and get the absolute path
+        val cmd = "cd \"$basePath\" && cd \"$target\" && pwd"
+        val result = executeCommand(cmd)
+
+        // Return the new path if successful, otherwise return the old one
+        return if (result.startsWith("/") && !result.contains("Error", ignoreCase = true)) {
+            result
+        } else {
+            basePath
+        }
+    }
+
+    fun getFileList(path: String): List<String> {
+        Log.d(tag, "Fetching file list for: $path")
+        val raw = executeCommand("ls -1 \"$path\"")
+        if (raw.isBlank() || raw.startsWith("Error")) {
+            Log.w(tag, "No files found or error occurred at $path")
+            return emptyList()
+        }
+        val list = raw.split(Regex("\\r?\\n")).map { it.trim() }.filter { it.isNotEmpty() }
+        Log.d(tag, "Parsed ${list.size} items")
+        return list
+    }
+
     fun disconnect() {
+        Log.d(tag, "Disconnecting session...")
         session?.disconnect()
-        Log.d("SSH_TEST", "Disconnected")
+        session = null
     }
 }
