@@ -8,7 +8,7 @@ import java.util.Properties
 
 class SSHManager {
     private var session: Session? = null
-    private val tag = "SSH_DEBUG"
+    private val tag = "SSH_CLI"
 
     fun connect(host: String, user: String, pass: String, port: Int): Boolean {
         Log.d(tag, "Attempting connection to $host:$port as $user")
@@ -73,7 +73,7 @@ class SSHManager {
         val result = executeCommand(cmd)
 
         // Return the new path if successful, otherwise return the old one
-        return if (result.startsWith("/") && !result.contains("Error", ignoreCase = true)) {
+        return if (result.startsWith("/") && !result.contains("Not a directory", ignoreCase = true)) {
             result
         } else {
             basePath
@@ -82,7 +82,7 @@ class SSHManager {
 
     fun getFileList(path: String): List<String> {
         Log.d(tag, "Fetching file list for: $path")
-        val raw = executeCommand("ls -1 \"$path\"")
+        val raw = executeCommand("ls -1LF \"$path\"")
         if (raw.isBlank() || raw.startsWith("Error")) {
             Log.w(tag, "No files found or error occurred at $path")
             return emptyList()

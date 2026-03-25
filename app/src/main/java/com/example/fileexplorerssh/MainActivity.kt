@@ -41,7 +41,7 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private val sshManager = SSHManager()
-    private val uiTag = "UI_ACTION"
+    private val uiTag = "SSH_UI"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -168,10 +168,10 @@ class MainActivity : ComponentActivity() {
 
             LazyVerticalGrid(columns = GridCells.Adaptive(110.dp), modifier = Modifier.weight(1f)) {
                 items(fileList) { raw ->
-                    val isLink = raw.contains("->")
-                    val isDir = raw.endsWith("/") || isLink
-                    val cleanName = if (isLink) raw.substringBefore("->").trim().trimEnd('@')
-                    else raw.trimEnd('/', '*', '@', '|', '=')
+
+                    val isDir = raw.endsWith("/") || raw.endsWith("@")
+
+                    val cleanName = raw.substringBefore("->").trim().trimEnd('/', '*', '@', '|', '=')
 
                     Button(
                         onClick = {
@@ -208,7 +208,7 @@ class MainActivity : ComponentActivity() {
                             containerColor = if (isDir) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
                         )
                     ) {
-                        Text("${if (isDir) "📁" else "📄"} $cleanName", color = Color.White, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${if (isDir) "📁" else "📄"} $cleanName", color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
